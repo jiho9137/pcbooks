@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const COOKIE_NAME = "pkbooks_session";
+const COOKIE_NAME = "pcbooks_session";
 
 export function middleware(request: NextRequest) {
   const session = request.cookies.get(COOKIE_NAME)?.value;

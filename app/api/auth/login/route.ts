@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const COOKIE_NAME = "pkbooks_session";
+const COOKIE_NAME = "pcbooks_session";
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7일
 
 export async function POST(request: NextRequest) {
   const { password } = (await request.json()) as { password?: string };
-  const expected = process.env.PKBOOKS_PASSWORD;
+  const expected = process.env.PCBOOKS_PASSWORD;
 
   if (!expected) {
     return NextResponse.json(

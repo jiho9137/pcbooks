@@ -12,7 +12,7 @@ Next.js 기반 포토카드북 가상 책장 앱의 디렉터리·파일 구조�
 ## 프로젝트 루트
 
 ```
-D:\repository2\pkbooks\
+D:\repository2\pcbooks\
 ```
 
 ---
@@ -121,7 +121,7 @@ cardtype/
 ## 6. Next.js 앱 구조
 
 ```
-pkbooks/
+pcbooks/
 ├── app/
 │   ├── layout.tsx
 │   ├── page.tsx                 # 로그인 또는 책장 리다이렉트
@@ -171,4 +171,4 @@ pkbooks/
 | **저장된 책** | Supabase (메타·구조) + Vercel Blob (이미지) | 책/페이지/카드 테이블 + 이미지 URL |
 
 booktype·cardtype은 `.ts`로 정의·export, setting 기본값은 `.json` 또는 `.ts`, 이미지는 Blob에 업로드 후 URL만 DB에 저장.  
-실제 저장 위치가 `D:\repository2\pkbooks`가 아니면 경로만 교체해 사용하면 됩니다.
+실제 저장 위치가 `D:\repository2\pcbooks`가 아니면 경로만 교체해 사용하면 됩니다.
