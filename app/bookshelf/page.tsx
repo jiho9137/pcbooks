@@ -1,7 +1,13 @@
+import BookshelfGrid from "@/components/bookshelf/BookshelfGrid";
+import BookshelfHeader from "@/components/bookshelf/BookshelfHeader";
+
 export default function BookshelfPage() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-100 dark:bg-zinc-900">
-      <div className="text-zinc-500 dark:text-zinc-400">로그인됨 · 빈 페이지</div>
+    <div className="flex min-h-screen flex-col bg-zinc-100 dark:bg-zinc-900">
+      <BookshelfHeader />
+      <main className="flex flex-1 items-center justify-center">
+        <BookshelfGrid />
+      </main>
     </div>
   );
 }

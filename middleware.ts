@@ -8,8 +8,13 @@ export function middleware(request: NextRequest) {
   const isLoggedIn = session === "1";
   const { pathname } = request.nextUrl;
 
-  // 로그인 필요 경로: /bookshelf 및 그 하위
-  if (pathname.startsWith("/bookshelf")) {
+  // 로그인 필요 경로: /bookshelf, /settings, /create, /book 및 그 하위
+  if (
+    pathname.startsWith("/bookshelf") ||
+    pathname.startsWith("/settings") ||
+    pathname.startsWith("/create") ||
+    pathname.startsWith("/book")
+  ) {
     if (!isLoggedIn) {
       return NextResponse.redirect(new URL("/", request.url));
     }

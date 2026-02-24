@@ -5,11 +5,12 @@ const COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7일
 
 export async function POST(request: NextRequest) {
   const { password } = (await request.json()) as { password?: string };
-  const expected = process.env.PCBOOKS_PASSWORD;
+  const expected =
+    process.env.PCBOOKS_PASSWORD ?? process.env.PKBOOKS_PASSWORD;
 
-  if (!expected) {
+  if (!expected || expected.trim() === "") {
     return NextResponse.json(
-      { error: "서버 설정 오류" },
+      { error: "서버 설정 오류 (PCBOOKS_PASSWORD를 .env.local에 설정하세요)" },
       { status: 500 }
     );
   }
