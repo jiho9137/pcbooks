@@ -240,7 +240,8 @@ export default function BookPage() {
       let bookData = bookRes.data;
       if (bookRes.error && bookData == null) {
         const fallback = await supabase.from("books").select("id, title, booktype_id, cardtype_id").eq("id", id).single();
-        bookData = fallback.data ?? null;
+        const raw = fallback.data;
+        bookData = raw ? { ...raw, cards_per_side_rows: null, cards_per_side_cols: null } : null;
       }
       setBook(bookData ?? null);
       if (pagesRes.error) {
@@ -758,7 +759,7 @@ export default function BookPage() {
                               autoFocus
                             />
                           ) : (left.label?.trim() ?? "") ? (
-                            <span className="text-sm text-zinc-700 dark:text-zinc-300">{left.label.trim()}</span>
+                            <span className="text-sm text-zinc-700 dark:text-zinc-300">{left.label?.trim() ?? ""}</span>
                           ) : null}
                         </div>
                         <div
@@ -914,7 +915,7 @@ export default function BookPage() {
                               autoFocus
                             />
                           ) : (right.label?.trim() ?? "") ? (
-                            <span className="text-sm text-zinc-700 dark:text-zinc-300">{right.label.trim()}</span>
+                            <span className="text-sm text-zinc-700 dark:text-zinc-300">{right.label?.trim() ?? ""}</span>
                           ) : null}
                         </div>
                         <div

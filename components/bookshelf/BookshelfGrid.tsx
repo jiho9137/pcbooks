@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { bookArrangement } from "@/setting/book_arrangement";
-import { getArrangementFromSupabase } from "@/lib/supabase/settings";
+import { getArrangementFromSupabase, type Arrangement } from "@/lib/supabase/settings";
 import { getArrangement } from "@/lib/bookshelfArrangement";
 import { supabase } from "@/lib/supabase/client";
 
@@ -19,7 +19,7 @@ type Book = {
 type ContextMenu = { bookId: string; x: number; y: number };
 
 export default function BookshelfGrid() {
-  const [arrangement, setArrangement] = useState(bookArrangement);
+  const [arrangement, setArrangement] = useState<Arrangement>(bookArrangement);
   const [books, setBooks] = useState<Book[]>([]);
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
   const router = useRouter();
