@@ -1,6 +1,9 @@
 import { definition as cardtype001Def } from "./cardtype001/definition";
 import { layout as cardtype001Layout } from "./cardtype001/layout";
 import { style as cardtype001Style } from "./cardtype001/style";
+import { definition as cardtype002Def } from "./cardtype002/definition";
+import { layout as cardtype002Layout } from "./cardtype002/layout";
+import { style as cardtype002Style } from "./cardtype002/style";
 import { cardStyleDefault } from "./card_style_default";
 
 export const cardtype001 = {
@@ -9,7 +12,13 @@ export const cardtype001 = {
   style: cardtype001Style,
 };
 
-export const cardTypes = [cardtype001] as const;
+export const cardtype002 = {
+  definition: cardtype002Def,
+  layout: cardtype002Layout,
+  style: cardtype002Style,
+};
+
+export const cardTypes = [cardtype001, cardtype002] as const;
 export const cardTypeIds = cardTypes.map((c) => c.definition.id);
 
 export type CardTypeId = (typeof cardTypeIds)[number];

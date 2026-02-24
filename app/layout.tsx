@@ -17,13 +17,26 @@ export const metadata: Metadata = {
   description: "포토카드북 가상 책장",
 };
 
+const themeScript = `
+(function() {
+  var v = localStorage.getItem('pcbooks_dark');
+  if (v === '1' || v === 'true') document.documentElement.classList.add('dark');
+  else if (v === '0' || v === 'false') document.documentElement.classList.remove('dark');
+  else if (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) document.documentElement.classList.add('dark');
+  else document.documentElement.classList.remove('dark');
+})();
+`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="ko" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >

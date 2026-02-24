@@ -18,8 +18,13 @@ export interface SpreadConfig {
   showSpread: boolean;
 }
 
+/** 책 타입에 연결된 카드타입 모듈 폴더명 (cardtype | cardtype2 | cardtype3) */
+export type CardTypeModuleId = "cardtype" | "cardtype2" | "cardtype3";
+
 export interface BookTypeDefinition {
   id: string;
   name: string;
   description?: string;
+  /** 이 책 타입에서 고를 수 있는 카드타입 모듈 */
+  cardTypeModule: CardTypeModuleId;
 }

@@ -1,20 +1,31 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { bookTypes } from "@/booktype";
-import { cardTypes } from "@/cardtype";
+import { getCardTypesForBookType } from "@/lib/cardTypesRegistry";
 import { supabase } from "@/lib/supabase/client";
 import { DEFAULT_BOOK_PAGES } from "@/lib/bookConstants";
 
 export default function CreatePage() {
   const [title, setTitle] = useState("");
   const [bookTypeId, setBookTypeId] = useState(bookTypes[0].definition.id);
-  const [cardTypeId, setCardTypeId] = useState(cardTypes[0].definition.id);
+  const cardTypesForBook = useMemo(
+    () => getCardTypesForBookType(bookTypeId),
+    [bookTypeId]
+  );
+  const [cardTypeId, setCardTypeId] = useState(cardTypesForBook[0]?.definition.id ?? "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const router = useRouter();
+
+  useEffect(() => {
+    const first = cardTypesForBook[0]?.definition.id;
+    if (first) setCardTypeId(first);
+  }, [bookTypeId, cardTypesForBook]);
+
+  const effectiveCardTypeId = (cardTypeId || cardTypesForBook[0]?.definition.id) ?? "";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -30,7 +41,7 @@ export default function CreatePage() {
         .insert({
           title: title.trim() || "제목 없음",
           booktype_id: bookTypeId,
-          cardtype_id: cardTypeId,
+          cardtype_id: effectiveCardTypeId,
         })
         .select("id")
         .single();
@@ -49,6 +60,8 @@ export default function CreatePage() {
       setLoading(false);
     }
   }
+
+  const canSubmit = Boolean(effectiveCardTypeId);
 
   return (
     <div className="flex min-h-screen flex-col bg-zinc-100 dark:bg-zinc-900">
@@ -112,10 +125,10 @@ export default function CreatePage() {
 
             <fieldset className="flex flex-col gap-2">
               <legend className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                포토카드 타입
+                카드 타입
               </legend>
               <div className="flex flex-col gap-2">
-                {cardTypes.map((ct) => (
+                {cardTypesForBook.map((ct) => (
                   <label
                     key={ct.definition.id}
                     className="flex cursor-pointer items-center gap-3 rounded-lg border border-zinc-200 bg-white p-3 transition dark:border-zinc-600 dark:bg-zinc-800"
@@ -124,7 +137,7 @@ export default function CreatePage() {
                       type="radio"
                       name="cardType"
                       value={ct.definition.id}
-                      checked={cardTypeId === ct.definition.id}
+                      checked={effectiveCardTypeId === ct.definition.id}
                       onChange={() => setCardTypeId(ct.definition.id)}
                       className="h-4 w-4"
                     />
@@ -148,7 +161,7 @@ export default function CreatePage() {
             )}
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || !canSubmit}
               className="rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
             >
               {loading ? "만드는 중..." : "만들기"}

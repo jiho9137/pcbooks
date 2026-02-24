@@ -12,6 +12,11 @@ insert into app_settings (key, value)
 values ('book_arrangement', '{"rows": 6, "cols": 6}')
 on conflict (key) do nothing;
 
+-- 테마: "light" | "dark" | "system" (system = OS 설정 따름)
+insert into app_settings (key, value)
+values ('theme', '"system"')
+on conflict (key) do nothing;
+
 -- RLS: anon으로 읽기/쓰기 (비밀번호 로그인만 쓰므로 앱 접근자만 사용)
 alter table app_settings enable row level security;
 

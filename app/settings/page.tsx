@@ -9,6 +9,22 @@ import {
 } from "@/lib/supabase/settings";
 
 const STORAGE_KEY = "pcbooks_book_arrangement";
+const THEME_KEY = "pcbooks_dark";
+
+function getThemeFromStorage(): "light" | "dark" {
+  if (typeof window === "undefined") return "light";
+  const v = localStorage.getItem(THEME_KEY);
+  if (v === "1" || v === "true") return "dark";
+  if (v === "0" || v === "false") return "light";
+  return "light";
+}
+
+function applyTheme(dark: boolean) {
+  if (typeof document === "undefined") return;
+  if (dark) document.documentElement.classList.add("dark");
+  else document.documentElement.classList.remove("dark");
+  localStorage.setItem(THEME_KEY, dark ? "1" : "0");
+}
 
 function getFromLocalStorage(): { rows: number; cols: number } {
   if (typeof window === "undefined") return { rows: 6, cols: 6 };
@@ -34,7 +50,12 @@ export default function SettingsPage() {
   const [rows, setRows] = useState(6);
   const [cols, setCols] = useState(6);
   const [loading, setLoading] = useState(true);
+  const [darkMode, setDarkMode] = useState(false);
   const router = useRouter();
+
+  useEffect(() => {
+    setDarkMode(document.documentElement.classList.contains("dark"));
+  }, []);
 
   useEffect(() => {
     getArrangementFromSupabase()
@@ -88,10 +109,45 @@ export default function SettingsPage() {
         </Link>
       </header>
       <main className="flex flex-1 flex-col p-6">
-        <div className="mx-auto w-full max-w-sm">
-          <h2 className="mb-4 text-lg font-medium text-zinc-900 dark:text-zinc-50">
-            책장 배열
-          </h2>
+        <div className="mx-auto w-full max-w-sm space-y-8">
+          <section>
+            <h2 className="mb-4 text-lg font-medium text-zinc-900 dark:text-zinc-50">
+              다크 모드
+            </h2>
+            <div className="flex gap-4">
+              <label className="flex cursor-pointer items-center gap-2">
+                <input
+                  type="radio"
+                  name="theme"
+                  checked={!darkMode}
+                  onChange={() => {
+                    setDarkMode(false);
+                    applyTheme(false);
+                  }}
+                  className="h-4 w-4 border-zinc-300 text-zinc-900 focus:ring-zinc-500 dark:border-zinc-600 dark:bg-zinc-700"
+                />
+                <span className="text-sm text-zinc-700 dark:text-zinc-300">라이트</span>
+              </label>
+              <label className="flex cursor-pointer items-center gap-2">
+                <input
+                  type="radio"
+                  name="theme"
+                  checked={darkMode}
+                  onChange={() => {
+                    setDarkMode(true);
+                    applyTheme(true);
+                  }}
+                  className="h-4 w-4 border-zinc-300 text-zinc-900 focus:ring-zinc-500 dark:border-zinc-600 dark:bg-zinc-700"
+                />
+                <span className="text-sm text-zinc-700 dark:text-zinc-300">다크</span>
+              </label>
+            </div>
+          </section>
+
+          <section>
+            <h2 className="mb-4 text-lg font-medium text-zinc-900 dark:text-zinc-50">
+              책장 배열
+            </h2>
           <p className="mb-4 text-sm text-zinc-500 dark:text-zinc-400">
             책이 놓일 칸의 행·열 개수 (1~12)
           </p>
@@ -130,6 +186,7 @@ export default function SettingsPage() {
               적용하고 책장으로
             </button>
           </form>
+          </section>
         </div>
       </main>
     </div>

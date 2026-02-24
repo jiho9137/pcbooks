@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { bookTypes } from "@/booktype";
-import { cardTypes } from "@/cardtype";
+import { findCardTypeById } from "@/lib/cardTypesRegistry";
 
 type Book = {
   id: string;
@@ -214,7 +214,7 @@ export default function BookSettingsPage() {
               포토카드 타입
             </h2>
             {(() => {
-              const ct = cardTypes.find((c) => c.definition.id === book.cardtype_id);
+              const ct = findCardTypeById(book.cardtype_id);
               if (!ct) {
                 return (
                   <p className="text-sm text-zinc-500 dark:text-zinc-400">
