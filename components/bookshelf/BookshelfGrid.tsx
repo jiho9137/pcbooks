@@ -48,14 +48,17 @@ export default function BookshelfGrid() {
 
   const { rows, cols } = arrangement;
   const total = rows * cols;
+  // UI "행" = 가로 칸 수(columns), "열" = 세로 줄 수(rows)로 사용
+  const gridCols = rows;
+  const gridRows = cols;
 
   return (
     <>
       <div
         className="grid w-full max-w-4xl gap-3 p-4"
         style={{
-          gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
-          gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
+          gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))`,
+          gridTemplateRows: `repeat(${gridRows}, minmax(0, 1fr))`,
         }}
       >
         {Array.from({ length: total }, (_, i) => {

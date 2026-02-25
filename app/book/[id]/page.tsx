@@ -1,30 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { bookTypes } from "@/booktype";
-import { getCardTypesForBookType, findCardTypeById } from "@/lib/cardTypesRegistry";
+import { getCardTypesForBookType } from "@/lib/cardTypesRegistry";
 import { DEFAULT_BOOK_PAGES } from "@/lib/bookConstants";
-
-type Book = {
-  id: string;
-  title: string;
-  booktype_id: string;
-  cardtype_id: string;
-  cards_per_side_rows?: number | null;
-  cards_per_side_cols?: number | null;
-};
-
-type BookPage = {
-  id: string;
-  book_id: string;
-  page_order: number;
-  label?: string | null;
-};
-
-type ViewMode = "scroll" | "flip";
+import type { Book, BookPage, CardSettingsDraft, InventoryCard, SlotAssignments, ViewMode } from "@/lib/book/types";
+import { deleteCardImageUrls } from "@/lib/upload";
+import { useCardUpload } from "@/app/book/[id]/hooks/useCardUpload";
+import { useInventoryCards } from "@/app/book/[id]/hooks/useInventoryCards";
+import { useSlotAssignments } from "@/app/book/[id]/hooks/useSlotAssignments";
+import { useInventoryResize } from "@/app/book/[id]/hooks/useInventoryResize";
+import { CardSettingsModal } from "@/app/book/[id]/components/CardSettingsModal";
+import { InventoryGrid } from "@/app/book/[id]/components/InventoryGrid";
+import { SlotGrid } from "@/app/book/[id]/components/SlotGrid";
 
 export default function BookPage() {
   const params = useParams();
@@ -42,111 +33,20 @@ export default function BookPage() {
   const [pageMenu, setPageMenu] = useState<{ x: number; y: number; page: BookPage } | null>(null);
   const [deletingPageId, setDeletingPageId] = useState<string | null>(null);
   const [showInventory, setShowInventory] = useState(true);
-  const [inventoryWidth, setInventoryWidth] = useState(256);
-  const [isResizing, setIsResizing] = useState(false);
-  const resizeStartX = useRef(0);
-  const resizeStartWidth = useRef(256);
+  const { inventoryWidth, onResizeStart } = useInventoryResize();
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleInput, setTitleInput] = useState("");
   const [savingTitle, setSavingTitle] = useState(false);
-  type InventoryCard = {
-    id: string;
-    frontCardTypeId: string;
-    backCardTypeId: string;
-    frontImage?: string | null;
-    backImage?: string | null;
-  };
-  const [inventoryCards, setInventoryCards] = useState<InventoryCard[]>([]);
+  const [inventoryCards, setInventoryCards] = useInventoryCards(id ?? "");
   const [cardDisplaySide, setCardDisplaySide] = useState<Record<string, "front" | "back">>({});
   const [cardSettingsCardId, setCardSettingsCardId] = useState<string | null>(null);
-  const [cardSettingsDraft, setCardSettingsDraft] = useState<{
-    frontCardTypeId: string;
-    backCardTypeId: string;
-    frontImage: string | null;
-    backImage: string | null;
-  } | null>(null);
-  const [cardUploadingSide, setCardUploadingSide] = useState<"front" | "back" | null>(null);
-
-  const inventoryStorageKey = `pcbooks_inventory_${id}`;
-  const slotsStorageKey = `pcbooks_slots_${id}`;
-  const skipNextInventorySave = useRef(false);
-  const skipNextSlotsSave = useRef(false);
-
-  useEffect(() => {
-    if (!id) return;
-    try {
-      const raw = localStorage.getItem(inventoryStorageKey);
-      const parsed = raw ? (JSON.parse(raw) as InventoryCard[]) : [];
-      if (Array.isArray(parsed)) setInventoryCards(parsed);
-      skipNextInventorySave.current = true;
-    } catch {
-      setInventoryCards([]);
-      skipNextInventorySave.current = true;
-    }
-  }, [id, inventoryStorageKey]);
-
-  useEffect(() => {
-    if (!id) return;
-    if (skipNextInventorySave.current) {
-      skipNextInventorySave.current = false;
-      return;
-    }
-    try {
-      localStorage.setItem(inventoryStorageKey, JSON.stringify(inventoryCards));
-    } catch {
-      /* ignore */
-    }
-  }, [id, inventoryStorageKey, inventoryCards]);
-
-  type SlotAssignments = Record<string, (InventoryCard | string | null)[]>;
-  const [slotAssignments, setSlotAssignments] = useState<SlotAssignments>({});
-
-  useEffect(() => {
-    if (!id) return;
-    try {
-      const raw = localStorage.getItem(slotsStorageKey);
-      const parsed = raw ? (JSON.parse(raw) as SlotAssignments) : {};
-      if (parsed && typeof parsed === "object") setSlotAssignments(parsed);
-      skipNextSlotsSave.current = true;
-    } catch {
-      setSlotAssignments({});
-      skipNextSlotsSave.current = true;
-    }
-  }, [id, slotsStorageKey]);
-
-  useEffect(() => {
-    if (!id) return;
-    if (skipNextSlotsSave.current) {
-      skipNextSlotsSave.current = false;
-      return;
-    }
-    try {
-      localStorage.setItem(slotsStorageKey, JSON.stringify(slotAssignments));
-    } catch {
-      /* ignore */
-    }
-  }, [id, slotsStorageKey, slotAssignments]);
-
-  useEffect(() => {
-    if (!isResizing) return;
-    const minW = 200;
-    const maxW = 720;
-    function onMove(e: MouseEvent) {
-      const delta = e.clientX - resizeStartX.current;
-      setInventoryWidth((w) => Math.min(maxW, Math.max(minW, resizeStartWidth.current + delta)));
-    }
-    function onUp() {
-      setIsResizing(false);
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-    }
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-    return () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-    };
-  }, [isResizing]);
+  const [cardSettingsDraft, setCardSettingsDraft] = useState<CardSettingsDraft | null>(null);
+  const [slotAssignments, setSlotAssignments] = useSlotAssignments(id ?? "");
+  const cardUpload = useCardUpload(id ?? "", (side, url) => {
+    setCardSettingsDraft((d) =>
+      d ? { ...d, [side === "front" ? "frontImage" : "backImage"]: url } : d
+    );
+  });
 
   useEffect(() => {
     if (!pageMenu) return;
@@ -283,6 +183,135 @@ export default function BookPage() {
     setAddingPage(false);
   }
 
+  const handleInventoryDropFromSlot = useCallback(
+    (data: { from?: string; pageId?: string; slotIndex?: number }) => {
+      if (data.from !== "slot" || data.pageId == null || data.slotIndex == null) return;
+      const card = slotAssignments[data.pageId]?.[data.slotIndex];
+      if (card && typeof card === "object") setInventoryCards((inv) => [card, ...inv]);
+      setSlotAssignments((prev) => {
+        const arr = prev[data.pageId!] ?? [];
+        const next = [...arr];
+        next[data.slotIndex!] = null;
+        return { ...prev, [data.pageId!]: next };
+      });
+    },
+    [slotAssignments, setSlotAssignments, setInventoryCards]
+  );
+
+  const handleCardContextMenu = useCallback((card: InventoryCard) => {
+    setCardSettingsCardId(card.id);
+    const frontData: Record<string, unknown> =
+      card.frontCardTypeData && typeof card.frontCardTypeData === "object"
+        ? { ...card.frontCardTypeData }
+        : "frontCaption" in card || "frontTags" in card
+          ? { caption: (card as { frontCaption?: string }).frontCaption ?? "", tags: (card as { frontTags?: string }).frontTags ?? "" }
+          : {};
+    const backData: Record<string, unknown> =
+      card.backCardTypeData && typeof card.backCardTypeData === "object"
+        ? { ...card.backCardTypeData }
+        : "backCaption" in card || "backTags" in card
+          ? { caption: (card as { backCaption?: string }).backCaption ?? "", tags: (card as { backTags?: string }).backTags ?? "" }
+          : {};
+    setCardSettingsDraft({
+      frontCardTypeId: card.frontCardTypeId,
+      backCardTypeId: card.backCardTypeId,
+      frontImage: card.frontImage ?? null,
+      backImage: card.backImage ?? null,
+      frontShowImage: card.frontShowImage ?? true,
+      backShowImage: card.backShowImage ?? true,
+      frontFilterColorEnabled: card.frontFilterColorEnabled ?? false,
+      backFilterColorEnabled: card.backFilterColorEnabled ?? false,
+      frontFilterColor: card.frontFilterColor ?? "#000000",
+      backFilterColor: card.backFilterColor ?? "#000000",
+      frontFilterOpacity: card.frontFilterOpacity ?? 50,
+      backFilterOpacity: card.backFilterOpacity ?? 50,
+      frontCardTypeData: frontData,
+      backCardTypeData: backData,
+    });
+  }, []);
+
+  const handleCreateCard = useCallback(() => {
+    if (!book) return;
+    const types = getCardTypesForBookType(book.booktype_id);
+    const defaultId = types[0]?.definition.id ?? book.cardtype_id ?? "cardtype001";
+    setInventoryCards((prev) => [
+      { id: crypto.randomUUID(), frontCardTypeId: defaultId, backCardTypeId: defaultId },
+      ...prev,
+    ]);
+  }, [book]);
+
+  const handleCardSettingsClose = useCallback(() => {
+    setCardSettingsCardId(null);
+    setCardSettingsDraft(null);
+  }, []);
+
+  const handleCardSettingsApply = useCallback(() => {
+    if (!cardSettingsCardId || !cardSettingsDraft) return;
+    const updated = {
+      frontCardTypeId: cardSettingsDraft.frontCardTypeId,
+      backCardTypeId: cardSettingsDraft.backCardTypeId,
+      frontImage: cardSettingsDraft.frontImage,
+      backImage: cardSettingsDraft.backImage,
+      frontShowImage: cardSettingsDraft.frontShowImage,
+      backShowImage: cardSettingsDraft.backShowImage,
+      frontFilterColorEnabled: cardSettingsDraft.frontFilterColorEnabled,
+      backFilterColorEnabled: cardSettingsDraft.backFilterColorEnabled,
+      frontFilterColor: cardSettingsDraft.frontFilterColor,
+      backFilterColor: cardSettingsDraft.backFilterColor,
+      frontFilterOpacity: cardSettingsDraft.frontFilterOpacity,
+      backFilterOpacity: cardSettingsDraft.backFilterOpacity,
+      frontCardTypeData: cardSettingsDraft.frontCardTypeData,
+      backCardTypeData: cardSettingsDraft.backCardTypeData,
+    };
+    setInventoryCards((prev) =>
+      prev.map((c) => (c.id === cardSettingsCardId ? { ...c, ...updated } : c))
+    );
+    setSlotAssignments((prev) => {
+      const next = { ...prev };
+      for (const [pageId, arr] of Object.entries(next)) {
+        next[pageId] = arr.map((v) =>
+          v && typeof v === "object" && v.id === cardSettingsCardId ? { ...v, ...updated } : v
+        );
+      }
+      return next;
+    });
+    handleCardSettingsClose();
+  }, [cardSettingsCardId, cardSettingsDraft, handleCardSettingsClose]);
+
+  const handleCardDelete = useCallback(async () => {
+    if (!cardSettingsCardId) return;
+    let card = inventoryCards.find((c) => c.id === cardSettingsCardId);
+    if (!card) {
+      for (const arr of Object.values(slotAssignments)) {
+        const slot = arr.find(
+          (s): s is InventoryCard =>
+            s != null && typeof s === "object" && "id" in s && (s as InventoryCard).id === cardSettingsCardId
+        );
+        if (slot) {
+          card = slot;
+          break;
+        }
+      }
+    }
+    if (!card) return;
+    await deleteCardImageUrls([card.frontImage ?? "", card.backImage ?? ""]);
+    setInventoryCards((prev) => prev.filter((c) => c.id !== card!.id));
+    setSlotAssignments((prev) => {
+      const next: SlotAssignments = {};
+      for (const [pageId, arr] of Object.entries(prev)) {
+        next[pageId] = arr.map((v) =>
+          v && (typeof v === "object" ? v.id === card!.id : v === card!.id) ? null : v
+        );
+      }
+      return next;
+    });
+    handleCardSettingsClose();
+  }, [cardSettingsCardId, inventoryCards, slotAssignments, handleCardSettingsClose]);
+
+  const handleToggleDisplaySide = useCallback((cardId: string) => {
+    setCardDisplaySide((prev) => ({ ...prev, [cardId]: prev[cardId] === "back" ? "front" : "back" }));
+  }, []);
+
   if (loading) {
     return (
       <div className="flex min-h-screen flex-col bg-zinc-100 dark:bg-zinc-900">
@@ -394,309 +423,41 @@ export default function BookPage() {
               className="shrink-0 border-r border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-800 flex flex-col overflow-hidden"
               style={{ width: inventoryWidth }}
             >
-              <div className="flex items-center justify-between gap-2 p-3 border-b border-zinc-200 dark:border-zinc-700">
-                <div className="flex min-w-0 flex-1 items-center gap-2">
-                  <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200 shrink-0">카드 인벤토리</h2>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!book) return;
-                      const types = getCardTypesForBookType(book.booktype_id);
-                      const defaultId = types[0]?.definition.id ?? book.cardtype_id ?? "cardtype001";
-                      setInventoryCards((prev) => [
-                        {
-                          id: crypto.randomUUID(),
-                          frontCardTypeId: defaultId,
-                          backCardTypeId: defaultId,
-                        },
-                        ...prev,
-                      ]);
-                    }}
-                    className="shrink-0 rounded border border-zinc-300 px-2 py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-100 dark:border-zinc-600 dark:text-zinc-400 dark:hover:bg-zinc-600"
-                  >
-                    카드 만들기
-                  </button>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowInventory(false)}
-                  className="rounded p-1 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-600 dark:hover:text-zinc-200 shrink-0"
-                  aria-label="닫기"
-                >
-                  ×
-                </button>
-              </div>
-              <div
-                className="flex-1 overflow-y-auto p-2"
-                onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  const raw = e.dataTransfer.getData("text/plain") || e.dataTransfer.getData("application/json");
-                  if (!raw) return;
-                  try {
-                    const data = JSON.parse(raw) as { from?: string; pageId?: string; slotIndex?: number };
-                    if (data.from === "slot" && data.pageId != null && data.slotIndex != null) {
-                      const card = slotAssignments[data.pageId]?.[data.slotIndex];
-                      if (card && typeof card === "object") setInventoryCards((inv) => [card, ...inv]);
-                      setSlotAssignments((prev) => {
-                        const arr = prev[data.pageId!] ?? [];
-                        const next = [...arr];
-                        next[data.slotIndex!] = null;
-                        return { ...prev, [data.pageId!]: next };
-                      });
-                    }
-                  } catch {
-                    /* ignore */
-                  }
-                }}
-              >
-                <div className="grid grid-cols-4 gap-1.5">
-                  {Array.from({ length: 4 * 50 }, (_, i) => {
-                    const card = inventoryCards[i];
-                    const num = i + 1;
-                    const side = card ? (cardDisplaySide[card.id] ?? "front") : "front";
-                    const typeId = card ? (side === "front" ? card.frontCardTypeId : card.backCardTypeId) : "";
-                    const typeLabel = typeId ? (findCardTypeById(typeId)?.definition.name ?? typeId) : "";
-                    const currentImage = card ? (side === "front" ? card.frontImage : card.backImage) : null;
-                    const imgSrc = currentImage && (typeof currentImage === "string" && (currentImage.startsWith("http") || currentImage.startsWith("data:"))) ? currentImage : null;
-                    const isFullImageType = typeId === "cardtype002";
-                    const showImage = isFullImageType && imgSrc;
-                    return card ? (
-                      <div
-                        key={card.id}
-                        role="button"
-                        tabIndex={0}
-                        draggable
-                        onDragStart={(e) => {
-                          e.dataTransfer.setData("text/plain", JSON.stringify({ cardId: card.id }));
-                          e.dataTransfer.effectAllowed = "copy";
-                        }}
-                        className="relative aspect-[54/86] rounded border border-zinc-300 bg-white dark:border-zinc-500 dark:bg-zinc-600 flex flex-col items-center justify-center gap-0.5 shadow-sm cursor-grab active:cursor-grabbing hover:ring-2 hover:ring-zinc-400 dark:hover:ring-zinc-500 overflow-hidden"
-                        onClick={() =>
-                          setCardDisplaySide((prev) => ({
-                            ...prev,
-                            [card.id]: prev[card.id] === "back" ? "front" : "back",
-                          }))
-                        }
-                        onContextMenu={(e) => {
-                          e.preventDefault();
-                          setCardSettingsCardId(card.id);
-                          setCardSettingsDraft({
-                            frontCardTypeId: card.frontCardTypeId,
-                            backCardTypeId: card.backCardTypeId,
-                            frontImage: card.frontImage ?? null,
-                            backImage: card.backImage ?? null,
-                          });
-                        }}
-                      >
-                        {showImage ? (
-                          <img src={imgSrc} alt="" className="absolute inset-0 h-full w-full object-cover" draggable={false} />
-                        ) : null}
-                      </div>
-                    ) : (
-                      <div
-                        key={`empty-${i}`}
-                        className="aspect-[54/86] rounded border border-dashed border-zinc-300 bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-700 flex items-center justify-center"
-                      >
-                        <span className="text-[10px] text-zinc-400 dark:text-zinc-500">{num}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+              <InventoryGrid
+                cards={inventoryCards}
+                cardDisplaySide={cardDisplaySide}
+                onToggleDisplaySide={handleToggleDisplaySide}
+                onCardContextMenu={handleCardContextMenu}
+                onDropFromSlot={handleInventoryDropFromSlot}
+                onCreateCard={handleCreateCard}
+                onClose={() => setShowInventory(false)}
+              />
               {cardSettingsCardId && book && cardSettingsDraft && (() => {
-                const card = inventoryCards.find((c) => c.id === cardSettingsCardId);
-                const cardTypesForBook = getCardTypesForBookType(book.booktype_id);
-                if (!card) return null;
-                const isUrl = (s: string) => s.startsWith("http://") || s.startsWith("https://");
-                const getImgSrc = (path: string | null) =>
-                  !path ? null : isUrl(path) ? path : path;
-                const close = () => {
-                  setCardSettingsCardId(null);
-                  setCardSettingsDraft(null);
-                };
-                const deleteCard = () => {
-                  setInventoryCards((prev) => prev.filter((c) => c.id !== card.id));
-                  setSlotAssignments((prev) => {
-                    const next: SlotAssignments = {};
-                    for (const [pageId, arr] of Object.entries(prev)) {
-                      next[pageId] = arr.map((v) =>
-                        v && (typeof v === "object" ? v.id === card.id : v === card.id) ? null : v
-                      );
-                    }
-                    return next;
-                  });
-                  close();
-                };
-                const apply = () => {
-                  setInventoryCards((prev) =>
-                    prev.map((c) =>
-                      c.id === card.id
-                        ? {
-                            ...c,
-                            frontCardTypeId: cardSettingsDraft.frontCardTypeId,
-                            backCardTypeId: cardSettingsDraft.backCardTypeId,
-                            frontImage: cardSettingsDraft.frontImage,
-                            backImage: cardSettingsDraft.backImage,
-                          }
-                        : c
-                    )
-                  );
-                  close();
-                };
-                const handleImageDrop = (side: "front" | "back") => async (e: React.DragEvent) => {
-                  e.preventDefault();
-                  (e.currentTarget as HTMLElement).classList.remove("ring-2", "ring-zinc-400");
-                  const file = e.dataTransfer.files[0];
-                  if (!file?.type.startsWith("image/")) return;
-                  setCardUploadingSide(side);
-                  try {
-                    const formData = new FormData();
-                    formData.append("file", file);
-                    formData.append("bookId", id ?? "");
-                    const res = await fetch("/api/upload", { method: "POST", body: formData });
-                    if (!res.ok) {
-                      const data = await res.json().catch(() => ({}));
-                      alert(data?.error ?? "업로드에 실패했습니다.");
-                      return;
-                    }
-                    const { url } = (await res.json()) as { url: string };
-                    setCardSettingsDraft((d) =>
-                      d ? { ...d, [side === "front" ? "frontImage" : "backImage"]: url } : d
+                let cardForSettings = inventoryCards.find((c) => c.id === cardSettingsCardId);
+                if (!cardForSettings) {
+                  for (const arr of Object.values(slotAssignments)) {
+                    const slot = arr.find(
+                      (s): s is InventoryCard =>
+                        s != null && typeof s === "object" && "id" in s && (s as InventoryCard).id === cardSettingsCardId
                     );
-                  } finally {
-                    setCardUploadingSide(null);
+                    if (slot) {
+                      cardForSettings = slot;
+                      break;
+                    }
                   }
-                };
-                const renderImageSection = (side: "front" | "back") => {
-                  const image = side === "front" ? cardSettingsDraft.frontImage : cardSettingsDraft.backImage;
-                  const label = side === "front" ? "전면 이미지" : "후면 이미지";
-                  const setImage = (v: string | null) =>
-                    setCardSettingsDraft((d) =>
-                      d ? { ...d, [side === "front" ? "frontImage" : "backImage"]: v } : d
-                    );
-                  const src = getImgSrc(image);
-                  return (
-                    <div key={side} className="space-y-2">
-                      <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{label}</p>
-                      <div
-                        className="flex min-h-[160px] items-center justify-center rounded-lg border-2 border-dashed border-zinc-300 bg-zinc-200/80 dark:border-zinc-600 dark:bg-zinc-700/80"
-                        onDragOver={(e) => {
-                          e.preventDefault();
-                          (e.currentTarget as HTMLElement).classList.add("ring-2", "ring-zinc-400");
-                        }}
-                        onDragLeave={(e) => {
-                          (e.currentTarget as HTMLElement).classList.remove("ring-2", "ring-zinc-400");
-                        }}
-                        onDrop={handleImageDrop(side)}
-                      >
-                        {cardUploadingSide === side ? (
-                          <span className="text-sm text-zinc-500">업로드 중...</span>
-                        ) : src ? (
-                          <img src={src} alt="" className="max-h-[140px] max-w-full object-contain" />
-                        ) : (
-                          <span className="text-sm text-zinc-500">드래그앤드롭 또는 아래에 이미지 주소 입력</span>
-                        )}
-                      </div>
-                      <input
-                        type="url"
-                        value={image && isUrl(image) ? image : ""}
-                        onChange={(e) => {
-                          const v = e.target.value.trim();
-                          setImage(v || null);
-                        }}
-                        onBlur={(e) => {
-                          const v = e.target.value.trim();
-                          if (!v && image && isUrl(image)) setImage(null);
-                        }}
-                        placeholder="또는 이미지 URL (http://, https://)"
-                        className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-700 dark:text-zinc-100"
-                      />
-                    </div>
-                  );
-                };
+                }
+                if (!cardForSettings) return null;
                 return (
-                  <div
-                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
-                    data-card-settings-modal
-                    onClick={(e) => e.target === e.currentTarget && close()}
-                  >
-                    <div
-                      className="flex max-h-[90vh] min-h-[400px] min-w-[1152px] flex-col rounded-2xl bg-white shadow-xl dark:bg-zinc-800"
-                      onClick={(e) => e.stopPropagation()}
-                      onMouseDown={(e) => e.stopPropagation()}
-                    >
-                      <div className="flex shrink-0 items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-600">
-                        <h2 className="text-xl font-semibold text-zinc-800 dark:text-zinc-200">카드 설정</h2>
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            className="rounded-lg bg-red-100 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-300 dark:hover:bg-red-900/50"
-                            onClick={deleteCard}
-                          >
-                            카드 삭제
-                          </button>
-                          <button
-                            type="button"
-                            className="flex h-10 w-10 items-center justify-center rounded-full text-zinc-500 transition-colors hover:bg-zinc-200 hover:text-zinc-800 dark:hover:bg-zinc-600 dark:hover:text-zinc-100"
-                            onClick={close}
-                            aria-label="닫기"
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M18 6 6 18" /><path d="m6 6 12 12" />
-                            </svg>
-                          </button>
-                        </div>
-                      </div>
-                      <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-4">
-                        <div className="grid grid-cols-2 gap-8">
-                          <div className="space-y-4">
-                            <label className="block">
-                              <span className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">카드타입 전면</span>
-                              <select
-                                value={cardSettingsDraft.frontCardTypeId}
-                                onChange={(e) =>
-                                  setCardSettingsDraft((d) => (d ? { ...d, frontCardTypeId: e.target.value } : d))
-                                }
-                                className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-700 dark:text-zinc-50"
-                              >
-                                {cardTypesForBook.map((ct) => (
-                                  <option key={ct.definition.id} value={ct.definition.id}>{ct.definition.name}</option>
-                                ))}
-                              </select>
-                            </label>
-                            {cardSettingsDraft.frontCardTypeId === "cardtype002" && renderImageSection("front")}
-                          </div>
-                          <div className="space-y-4">
-                            <label className="block">
-                              <span className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">카드타입 후면</span>
-                              <select
-                                value={cardSettingsDraft.backCardTypeId}
-                                onChange={(e) =>
-                                  setCardSettingsDraft((d) => (d ? { ...d, backCardTypeId: e.target.value } : d))
-                                }
-                                className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-700 dark:text-zinc-50"
-                              >
-                                {cardTypesForBook.map((ct) => (
-                                  <option key={ct.definition.id} value={ct.definition.id}>{ct.definition.name}</option>
-                                ))}
-                              </select>
-                            </label>
-                            {cardSettingsDraft.backCardTypeId === "cardtype002" && renderImageSection("back")}
-                          </div>
-                        </div>
-                        <div className="mt-6 flex justify-end">
-                          <button
-                            type="button"
-                            onClick={apply}
-                            className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition-transform active:scale-95 hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
-                          >
-                            적용
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                  <CardSettingsModal
+                    card={cardForSettings}
+                    draft={cardSettingsDraft}
+                    onDraftChange={setCardSettingsDraft}
+                    onApply={handleCardSettingsApply}
+                    onDelete={handleCardDelete}
+                    onClose={handleCardSettingsClose}
+                    cardUpload={cardUpload}
+                    cardTypesForBook={getCardTypesForBookType(book.booktype_id)}
+                  />
                 );
               })()}
             </aside>
@@ -704,12 +465,7 @@ export default function BookPage() {
               role="separator"
               aria-label="인벤토리 너비 조절"
               className="w-1.5 shrink-0 cursor-col-resize bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-600 dark:hover:bg-zinc-500 flex items-center justify-center group"
-              onMouseDown={(e) => {
-                e.preventDefault();
-                resizeStartX.current = e.clientX;
-                resizeStartWidth.current = inventoryWidth;
-                setIsResizing(true);
-              }}
+              onMouseDown={onResizeStart}
             >
               <span className="w-0.5 h-8 rounded-full bg-zinc-400 opacity-0 group-hover:opacity-100 group-active:opacity-100 dark:bg-zinc-300" />
             </div>
@@ -762,123 +518,19 @@ export default function BookPage() {
                             <span className="text-sm text-zinc-700 dark:text-zinc-300">{left.label?.trim() ?? ""}</span>
                           ) : null}
                         </div>
-                        <div
-                          data-card-grid
-                          className="grid gap-2 w-full"
-                          style={{
-                            gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
-                            aspectRatio: `${cols * 54} / ${rows * 86}`,
-                          }}
-                        >
-                          {Array.from({ length: slotCount }, (_, i) => {
-                            const pageId = left.id;
-                            const rawSlot = slotAssignments[pageId]?.[i] ?? null;
-                            const slotCard = rawSlot && typeof rawSlot === "object" ? rawSlot : (typeof rawSlot === "string" ? inventoryCards.find((c) => c.id === rawSlot) ?? null : null);
-                            const slotSide = slotCard ? (cardDisplaySide[slotCard.id] ?? "front") : "front";
-                            const slotTypeId = slotCard ? (slotSide === "front" ? slotCard.frontCardTypeId : slotCard.backCardTypeId) : "";
-                            const slotImg = slotCard ? (slotSide === "front" ? slotCard.frontImage : slotCard.backImage) : null;
-                            const slotImgSrc = slotTypeId === "cardtype002" && slotImg && (typeof slotImg === "string" && (slotImg.startsWith("http") || slotImg.startsWith("data:"))) ? slotImg : null;
-                            return (
-                              <div
-                                key={i}
-                                className={`relative flex min-w-0 items-center justify-center rounded-lg border-2 border-dashed border-zinc-300 bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-700 ${!slotCard ? "min-h-0" : ""}`}
-                                style={{ aspectRatio: "54 / 86" }}
-                                onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
-                                onDrop={(e) => {
-                                  e.preventDefault();
-                                  const raw = e.dataTransfer.getData("text/plain") || e.dataTransfer.getData("application/json");
-                                  if (!raw) return;
-                                  try {
-                                    const data = JSON.parse(raw) as { cardId?: string; from?: string; pageId?: string; slotIndex?: number };
-                                    if (data.from === "slot" && data.pageId != null && data.slotIndex != null) {
-                                      setSlotAssignments((prev) => {
-                                        const card = prev[data.pageId!]?.[data.slotIndex!];
-                                        const cardObj = card && typeof card === "object" ? card : null;
-                                        if (!cardObj) return prev;
-                                        const next = { ...prev };
-                                        const srcArr = next[data.pageId!] ?? [];
-                                        const srcCopy = [...srcArr];
-                                        srcCopy[data.slotIndex!] = null;
-                                        next[data.pageId!] = srcCopy;
-                                        const tgtArr = next[pageId] ?? Array(slotCount).fill(null);
-                                        const tgtCopy = tgtArr.length >= slotCount ? [...tgtArr] : [...tgtArr, ...Array(slotCount - tgtArr.length).fill(null)];
-                                        tgtCopy[i] = cardObj;
-                                        next[pageId] = tgtCopy.slice(0, slotCount);
-                                        return next;
-                                      });
-                                    } else if (data.cardId) {
-                                      const card = inventoryCards.find((c) => c.id === data.cardId);
-                                      if (!card) return;
-                                      setSlotAssignments((prev) => {
-                                        const arr = prev[pageId] ?? Array(slotCount).fill(null);
-                                        const next = arr.length >= slotCount ? [...arr] : [...arr, ...Array(slotCount - arr.length).fill(null)];
-                                        next[i] = card;
-                                        return { ...prev, [pageId]: next.slice(0, slotCount) };
-                                      });
-                                      setInventoryCards((prev) => prev.filter((c) => c.id !== data.cardId));
-                                    }
-                                  } catch {
-                                    /* ignore */
-                                  }
-                                }}
-                              >
-                                {slotCard ? (
-                                  <div
-                                    className="absolute inset-0 rounded-lg overflow-hidden border border-zinc-300 bg-white dark:border-zinc-500 dark:bg-zinc-600 cursor-grab active:cursor-grabbing"
-                                    draggable
-                                    onDragOver={(ev) => { ev.preventDefault(); ev.stopPropagation(); ev.dataTransfer.dropEffect = "move"; }}
-                                    onDrop={(ev) => {
-                                      ev.preventDefault();
-                                      ev.stopPropagation();
-                                      const raw = ev.dataTransfer.getData("text/plain") || ev.dataTransfer.getData("application/json");
-                                      if (!raw) return;
-                                      try {
-                                        const data = JSON.parse(raw) as { cardId?: string; from?: string; pageId?: string; slotIndex?: number };
-                                        if (data.from === "slot" && data.pageId != null && data.slotIndex != null && (data.pageId !== pageId || data.slotIndex !== i)) {
-                                          setSlotAssignments((prev) => {
-                                            const card = prev[data.pageId!]?.[data.slotIndex!];
-                                            const cardObj = card && typeof card === "object" ? card : null;
-                                            if (!cardObj) return prev;
-                                            const next = { ...prev };
-                                            const srcArr = next[data.pageId!] ?? [];
-                                            const srcCopy = [...srcArr];
-                                            srcCopy[data.slotIndex!] = null;
-                                            next[data.pageId!] = srcCopy;
-                                            const tgtArr = next[pageId] ?? Array(slotCount).fill(null);
-                                            const tgtCopy = tgtArr.length >= slotCount ? [...tgtArr] : [...tgtArr, ...Array(slotCount - tgtArr.length).fill(null)];
-                                            tgtCopy[i] = cardObj;
-                                            next[pageId] = tgtCopy.slice(0, slotCount);
-                                            return next;
-                                          });
-                                        } else if (data.cardId) {
-                                          const card = inventoryCards.find((c) => c.id === data.cardId);
-                                          if (!card) return;
-                                          setSlotAssignments((prev) => {
-                                            const arr = prev[pageId] ?? Array(slotCount).fill(null);
-                                            const next = arr.length >= slotCount ? [...arr] : [...arr, ...Array(slotCount - arr.length).fill(null)];
-                                            next[i] = card;
-                                            return { ...prev, [pageId]: next.slice(0, slotCount) };
-                                          });
-                                          setInventoryCards((prev) => prev.filter((c) => c.id !== data.cardId));
-                                        }
-                                      } catch {
-                                        /* ignore */
-                                      }
-                                    }}
-                                    onDragStart={(ev) => {
-                                      ev.dataTransfer.setData("text/plain", JSON.stringify({ from: "slot", pageId, slotIndex: i }));
-                                      ev.dataTransfer.effectAllowed = "move";
-                                    }}
-                                  >
-                                    {slotImgSrc ? <img src={slotImgSrc} alt="" className="h-full w-full object-cover" draggable={false} /> : null}
-                                  </div>
-                                ) : (
-                                  <span className="text-xs text-zinc-400 dark:text-zinc-500">{i + 1}</span>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
+                        <SlotGrid
+                          pageId={left.id}
+                          slotCount={slotCount}
+                          rows={rows}
+                          cols={cols}
+                          slotAssignments={slotAssignments}
+                          inventoryCards={inventoryCards}
+                          cardDisplaySide={cardDisplaySide}
+                          onToggleDisplaySide={handleToggleDisplaySide}
+                          onCardContextMenu={handleCardContextMenu}
+                          setSlotAssignments={setSlotAssignments}
+                          setInventoryCards={setInventoryCards}
+                        />
                         <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400 text-left shrink-0">
                           {spreadIdx * 2 + 1}쪽
                         </p>
@@ -918,123 +570,19 @@ export default function BookPage() {
                             <span className="text-sm text-zinc-700 dark:text-zinc-300">{right.label?.trim() ?? ""}</span>
                           ) : null}
                         </div>
-                        <div
-                          data-card-grid
-                          className="grid gap-2 w-full"
-                          style={{
-                            gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
-                            aspectRatio: `${cols * 54} / ${rows * 86}`,
-                          }}
-                        >
-                          {Array.from({ length: slotCount }, (_, i) => {
-                            const pageId = right.id;
-                            const rawSlot = slotAssignments[pageId]?.[i] ?? null;
-                            const slotCard = rawSlot && typeof rawSlot === "object" ? rawSlot : (typeof rawSlot === "string" ? inventoryCards.find((c) => c.id === rawSlot) ?? null : null);
-                            const slotSide = slotCard ? (cardDisplaySide[slotCard.id] ?? "front") : "front";
-                            const slotTypeId = slotCard ? (slotSide === "front" ? slotCard.frontCardTypeId : slotCard.backCardTypeId) : "";
-                            const slotImg = slotCard ? (slotSide === "front" ? slotCard.frontImage : slotCard.backImage) : null;
-                            const slotImgSrc = slotTypeId === "cardtype002" && slotImg && (typeof slotImg === "string" && (slotImg.startsWith("http") || slotImg.startsWith("data:"))) ? slotImg : null;
-                            return (
-                              <div
-                                key={i}
-                                className={`relative flex min-w-0 items-center justify-center rounded-lg border-2 border-dashed border-zinc-300 bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-700 ${!slotCard ? "min-h-0" : ""}`}
-                                style={{ aspectRatio: "54 / 86" }}
-                                onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
-                                onDrop={(e) => {
-                                  e.preventDefault();
-                                  const raw = e.dataTransfer.getData("text/plain") || e.dataTransfer.getData("application/json");
-                                  if (!raw) return;
-                                  try {
-                                    const data = JSON.parse(raw) as { cardId?: string; from?: string; pageId?: string; slotIndex?: number };
-                                    if (data.from === "slot" && data.pageId != null && data.slotIndex != null) {
-                                      setSlotAssignments((prev) => {
-                                        const card = prev[data.pageId!]?.[data.slotIndex!];
-                                        const cardObj = card && typeof card === "object" ? card : null;
-                                        if (!cardObj) return prev;
-                                        const next = { ...prev };
-                                        const srcArr = next[data.pageId!] ?? [];
-                                        const srcCopy = [...srcArr];
-                                        srcCopy[data.slotIndex!] = null;
-                                        next[data.pageId!] = srcCopy;
-                                        const tgtArr = next[pageId] ?? Array(slotCount).fill(null);
-                                        const tgtCopy = tgtArr.length >= slotCount ? [...tgtArr] : [...tgtArr, ...Array(slotCount - tgtArr.length).fill(null)];
-                                        tgtCopy[i] = cardObj;
-                                        next[pageId] = tgtCopy.slice(0, slotCount);
-                                        return next;
-                                      });
-                                    } else if (data.cardId) {
-                                      const card = inventoryCards.find((c) => c.id === data.cardId);
-                                      if (!card) return;
-                                      setSlotAssignments((prev) => {
-                                        const arr = prev[pageId] ?? Array(slotCount).fill(null);
-                                        const next = arr.length >= slotCount ? [...arr] : [...arr, ...Array(slotCount - arr.length).fill(null)];
-                                        next[i] = card;
-                                        return { ...prev, [pageId]: next.slice(0, slotCount) };
-                                      });
-                                      setInventoryCards((prev) => prev.filter((c) => c.id !== data.cardId));
-                                    }
-                                  } catch {
-                                    /* ignore */
-                                  }
-                                }}
-                              >
-                                {slotCard ? (
-                                  <div
-                                    className="absolute inset-0 rounded-lg overflow-hidden border border-zinc-300 bg-white dark:border-zinc-500 dark:bg-zinc-600 cursor-grab active:cursor-grabbing"
-                                    draggable
-                                    onDragOver={(ev) => { ev.preventDefault(); ev.stopPropagation(); ev.dataTransfer.dropEffect = "move"; }}
-                                    onDrop={(ev) => {
-                                      ev.preventDefault();
-                                      ev.stopPropagation();
-                                      const raw = ev.dataTransfer.getData("text/plain") || ev.dataTransfer.getData("application/json");
-                                      if (!raw) return;
-                                      try {
-                                        const data = JSON.parse(raw) as { cardId?: string; from?: string; pageId?: string; slotIndex?: number };
-                                        if (data.from === "slot" && data.pageId != null && data.slotIndex != null && (data.pageId !== pageId || data.slotIndex !== i)) {
-                                          setSlotAssignments((prev) => {
-                                            const card = prev[data.pageId!]?.[data.slotIndex!];
-                                            const cardObj = card && typeof card === "object" ? card : null;
-                                            if (!cardObj) return prev;
-                                            const next = { ...prev };
-                                            const srcArr = next[data.pageId!] ?? [];
-                                            const srcCopy = [...srcArr];
-                                            srcCopy[data.slotIndex!] = null;
-                                            next[data.pageId!] = srcCopy;
-                                            const tgtArr = next[pageId] ?? Array(slotCount).fill(null);
-                                            const tgtCopy = tgtArr.length >= slotCount ? [...tgtArr] : [...tgtArr, ...Array(slotCount - tgtArr.length).fill(null)];
-                                            tgtCopy[i] = cardObj;
-                                            next[pageId] = tgtCopy.slice(0, slotCount);
-                                            return next;
-                                          });
-                                        } else if (data.cardId) {
-                                          const card = inventoryCards.find((c) => c.id === data.cardId);
-                                          if (!card) return;
-                                          setSlotAssignments((prev) => {
-                                            const arr = prev[pageId] ?? Array(slotCount).fill(null);
-                                            const next = arr.length >= slotCount ? [...arr] : [...arr, ...Array(slotCount - arr.length).fill(null)];
-                                            next[i] = card;
-                                            return { ...prev, [pageId]: next.slice(0, slotCount) };
-                                          });
-                                          setInventoryCards((prev) => prev.filter((c) => c.id !== data.cardId));
-                                        }
-                                      } catch {
-                                        /* ignore */
-                                      }
-                                    }}
-                                    onDragStart={(ev) => {
-                                      ev.dataTransfer.setData("text/plain", JSON.stringify({ from: "slot", pageId, slotIndex: i }));
-                                      ev.dataTransfer.effectAllowed = "move";
-                                    }}
-                                  >
-                                    {slotImgSrc ? <img src={slotImgSrc} alt="" className="h-full w-full object-cover" draggable={false} /> : null}
-                                  </div>
-                                ) : (
-                                  <span className="text-xs text-zinc-400 dark:text-zinc-500">{i + 1}</span>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
+                        <SlotGrid
+                          pageId={right.id}
+                          slotCount={slotCount}
+                          rows={rows}
+                          cols={cols}
+                          slotAssignments={slotAssignments}
+                          inventoryCards={inventoryCards}
+                          cardDisplaySide={cardDisplaySide}
+                          onToggleDisplaySide={handleToggleDisplaySide}
+                          onCardContextMenu={handleCardContextMenu}
+                          setSlotAssignments={setSlotAssignments}
+                          setInventoryCards={setInventoryCards}
+                        />
                         <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400 text-right shrink-0">
                           {spreadIdx * 2 + 2}쪽
                         </p>
